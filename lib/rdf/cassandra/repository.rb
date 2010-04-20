@@ -50,7 +50,28 @@ module RDF::Cassandra
           block.call(RDF::Resource.new(slice.key.to_s))
         end
       else
-        Enumerator.new(self, :each_subject)
+        enum_subject
+      end
+    end
+
+    ##
+    # @see RDF::Enumerable#each_predicate
+    # @private
+    def each_predicate(&block)
+      if block_given?
+        values = {}
+        @keyspace.get_range(column_family).each do |slice|
+          slice.columns.each do |column_or_supercolumn|
+            column = column_or_supercolumn.column
+            value  = column.name.to_s
+            unless values.include?(value)
+              values[value] = true
+              block.call(RDF::URI.new(value))
+            end
+          end
+        end
+      else
+        enum_predicate
       end
     end
 
