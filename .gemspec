@@ -6,7 +6,7 @@ GEMSPEC = Gem::Specification.new do |gem|
   gem.date               = File.mtime('VERSION').strftime('%Y-%m-%d')
 
   gem.name               = 'rdf-cassandra'
-  gem.homepage           = 'http://rdf.rubyforge.org/'
+  gem.homepage           = 'http://rdf.rubyforge.org/cassandra/'
   gem.license            = 'Public Domain' if gem.respond_to?(:license=)
   gem.summary            = 'Apache Cassandra adapter for RDF.rb.'
   gem.description        = 'RDF.rb plugin providing an Apache Cassandra storage adapter.'
