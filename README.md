@@ -21,6 +21,57 @@ Examples
 
     require 'rdf/cassandra'
 
+Data Model
+----------
+
+This storage adapter stores RDF data in a resource-centric manner by mapping
+RDF subject terms to Cassandra row keys, RDF predicates to Cassandra
+supercolumns, and RDF object terms to Cassandra columns as follows:
+
+    {key     => {supercolumn => {column    => value }}}   # Cassandra terminology
+    {subject => {predicate   => {object_id => object}}}   # RDF terminology
+
+RDF object terms are stored using their canonical [N-Triples][]
+serialization and are uniquely identified by the SHA-1 fingerprint of that
+representation.
+
+For example, here's how some of RDF.rb's [DOAP data][RDF.rb DOAP] would be
+stored using the `RDF::Cassandra` data model:
+
+    {
+      "http://rdf.rubyforge.org/" => {
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" => {
+          "c0b66f5e31ec616497404f044ff0eaa210f21232" => "<http://usefulinc.com/ns/doap#Project>",
+        },
+        "http://usefulinc.com/ns/doap#developer" => {
+          "9d178ddaa88acfec63f812aa270b42291381b4ff" => "<http://ar.to/#self>",
+          "908b42dd9d1a3f5ac5ecf9540e1f9a753f444204" => "<http://bhuga.net/#ben>",
+          ...
+        },
+        ...
+      },
+      "http://ar.to/#self" => {
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" => {
+          "74a5c03994aacac0a36003afb61aaf7befc438fd" => "<http://xmlns.com/foaf/0.1/Person>",
+        },
+        "http://xmlns.com/foaf/0.1/name" => {
+          "f369f748e964ef2b82160d6389b63fb55949b464" => '"Arto Bendiken"',
+        },
+        ...
+      },
+      "http://bhuga.net/#ben" => {
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" => {
+          "74a5c03994aacac0a36003afb61aaf7befc438fd" => "<http://xmlns.com/foaf/0.1/Person>",
+        },
+        "http://xmlns.com/foaf/0.1/name" => {
+          "97325e589ac0194e74848090181b66b0db310750" => '"Ben Lavender"',
+        },
+        ...
+      },
+    }
+
+To learn more about Cassandra's data model, read [WTF is a SuperColumn?][WTF].
+
 Documentation
 -------------
 
@@ -67,5 +118,8 @@ License
 `RDF::Cassandra` is free and unencumbered public domain software. For more
 information, see <http://unlicense.org/> or the accompanying UNLICENSE file.
 
-[RDF.rb]:    http://rdf.rubyforge.org/
-[Cassandra]: http://cassandra.apache.org/
+[RDF.rb]:      http://rdf.rubyforge.org/
+[RDF.rb DOAP]: http://rdf.rubyforge.org/doap.ttl
+[Cassandra]:   http://cassandra.apache.org/
+[N-Triples]:   http://blog.datagraph.org/2010/03/grepping-ntriples
+[WTF]:         http://arin.me/blog/wtf-is-a-supercolumn-cassandra-data-model
