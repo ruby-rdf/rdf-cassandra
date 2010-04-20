@@ -134,6 +134,27 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#contexts
+    # @private
+    def contexts(options = {})
+      []
+    end
+
+    ##
+    # @see RDF::Enumerable#has_context?
+    # @private
+    def has_context?(value)
+      false
+    end
+
+    ##
+    # @see RDF::Enumerable#each_context
+    # @private
+    def each_context(&block)
+      enum_context unless block_given?
+    end
+
+    ##
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
