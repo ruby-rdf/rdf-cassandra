@@ -50,6 +50,21 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#count
+    # @private
+    def count
+      count = 0
+      each_predicate do |predicate|
+        each_subject do |subject|
+          column_families.each do |column_family|
+            count += @keyspace.count_columns(column_family, subject.to_s, predicate.to_s)
+          end
+        end
+      end
+      count
+    end
+
+    ##
     # @see RDF::Enumerable#each
     # @private
     def each(&block)

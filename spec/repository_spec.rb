@@ -4,6 +4,7 @@ require 'rdf/spec/repository'
 describe RDF::Cassandra::Repository do
   before :each do
     @repository = RDF::Cassandra::Repository.new
+    @repository.clear
   end
 
   # @see lib/rdf/spec/repository.rb
