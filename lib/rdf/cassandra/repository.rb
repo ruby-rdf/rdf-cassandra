@@ -41,6 +41,15 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#empty?
+    # @private
+    def empty?
+      column_families.all? do |column_family|
+        @keyspace.count_range(column_family).to_i.zero?
+      end
+    end
+
+    ##
     # @see RDF::Enumerable#each
     # @private
     def each(&block)
