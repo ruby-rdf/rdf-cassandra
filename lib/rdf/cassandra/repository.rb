@@ -157,6 +157,17 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#each_graph
+    # @private
+    def each_graph(&block)
+      if block_given?
+        block.call(RDF::Graph.new(nil, :data => self))
+      else
+        enum_graph # @since RDF.rb 0.1.9
+      end
+    end
+
+    ##
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
