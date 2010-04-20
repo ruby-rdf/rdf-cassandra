@@ -102,7 +102,9 @@ module RDF::Cassandra
       if block_given?
         column_families.each do |column_family|
           @keyspace.get_range(column_family).each do |slice|
-            block.call(RDF::Resource.new(slice.key.to_s))
+            if @keyspace.count_columns(column_family, slice.key.to_s).nonzero?
+              block.call(RDF::Resource.new(slice.key.to_s))
+            end
           end
         end
       else
