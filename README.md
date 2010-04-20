@@ -9,7 +9,8 @@ This is an [RDF.rb][] plugin that adds support for storing RDF data in the
 Features
 --------
 
-* Stores RDF statements in Apache Cassandra in a resource-centric manner.
+* Stores RDF statements in a resource-centric manner using one Cassandra
+  supercolumn family per RDF repository.
 
 Limitations
 -----------
@@ -20,6 +21,37 @@ Examples
 --------
 
     require 'rdf/cassandra'
+
+### Connecting to a local Cassandra server
+
+    repository = RDF::Cassandra::Repository.new
+
+### Connecting to specific Cassandra servers
+
+    repository = RDF::Cassandra::Repository.new(:servers => "127.0.0.1:9160")
+
+### Configuring the Cassandra keyspace and column family to use
+
+    repository = RDF::Cassandra::Repository.new({
+      :keyspace      => "MyApplication",  # defaults to "RDF"
+      :column_family => "MyRepository",   # defaults to "RDF"
+    })
+
+Configuration
+-------------
+
+As of Cassandra 0.6, all keyspaces and column families must be predeclared
+in `storage-conf.xml`. The following configuration snippet matches the
+default `RDF::Cassandra` options:
+
+    <Keyspaces>
+      <Keyspace Name="RDF">
+        <ColumnFamily Name="RDF"
+          ColumnType="Super"
+          CompareWith="UTF8Type"
+          CompareSubcolumnsWith="UTF8Type"/>
+      </Keyspace>
+    </Keyspaces>
 
 Data Model
 ----------
