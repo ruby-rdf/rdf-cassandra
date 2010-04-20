@@ -1,5 +1,6 @@
 require 'digest'
 require 'rdf'
+require 'rdf/ntriples'
 require 'cassandra'
 
 module RDF
