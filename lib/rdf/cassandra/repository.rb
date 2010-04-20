@@ -136,6 +136,32 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#each_object
+    # @private
+    def each_object(&block)
+      if block_given?
+        values = {}
+        column_families.each do |column_family|
+          @keyspace.get_range(column_family).each do |slice|
+            slice.columns.each do |column_or_supercolumn|
+              column  = column_or_supercolumn.column || column_or_supercolumn.super_column
+              columns = !column.respond_to?(:columns) ? [column] : column.columns
+              columns.each do |column|
+                value = column.value.to_s
+                unless values.include?(value)
+                  values[value] = true
+                  block.call(RDF::NTriples.unserialize(value))
+                end
+              end
+            end
+          end
+        end
+      else
+        enum_object
+      end
+    end
+
+    ##
     # @see RDF::Enumerable#contexts
     # @private
     def contexts(options = {})
