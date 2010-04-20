@@ -1,9 +1,9 @@
 require File.join(File.dirname(__FILE__), 'spec_helper')
 require 'rdf/spec/repository'
 
-describe RDF::Repository do
+describe RDF::Cassandra::Repository do
   before :each do
-    @repository = RDF::Repository.new
+    @repository = RDF::Cassandra::Repository.new
   end
 
   # @see lib/rdf/spec/repository.rb

@@ -3,6 +3,7 @@ require 'cassandra'
 
 module RDF
   module Cassandra
-    autoload :VERSION, 'rdf/cassandra/version'
+    autoload :Repository, 'rdf/cassandra/repository'
+    autoload :VERSION,    'rdf/cassandra/version'
   end
 end
