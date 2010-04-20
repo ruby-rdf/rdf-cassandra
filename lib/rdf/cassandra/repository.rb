@@ -38,7 +38,26 @@ module RDF::Cassandra
     # @see RDF::Enumerable#each
     # @private
     def each(&block)
-      # TODO
+      each_statement(&block)
+    end
+
+    ##
+    # @see RDF::Enumerable#each_statement
+    # @private
+    def each_statement(&block)
+      if block_given?
+        @keyspace.get_range(column_family).each do |slice|
+          subject = RDF::Resource.new(slice.key.to_s)
+          slice.columns.each do |column_or_supercolumn|
+            column    = column_or_supercolumn.column
+            predicate = RDF::URI.new(column.name.to_s)
+            object    = RDF::NTriples.unserialize(column.value.to_s)
+            block.call(RDF::Statement.new(subject, predicate, object))
+          end
+        end
+      else
+        enum_statement
+      end
     end
 
     ##
