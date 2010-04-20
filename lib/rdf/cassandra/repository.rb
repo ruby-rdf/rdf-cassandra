@@ -7,9 +7,9 @@ module RDF::Cassandra
 
     ##
     # @param  [Hash{Symbol => Object}] options
-    # @option options [String, #to_s] :keyspace ("RDF")
-    # @option options [String, #to_s] :servers  ("127.0.0.1:9160")
-    # @option options [String, #to_s] :family   ("RDF")
+    # @option options [String, #to_s] :keyspace      ("RDF")
+    # @option options [String, #to_s] :servers       ("127.0.0.1:9160")
+    # @option options [String, #to_s] :column_family ("RDF")
     # @yield  [repository]
     # @yieldparam [Repository] repository
     def initialize(options = {}, &block)
@@ -29,9 +29,15 @@ module RDF::Cassandra
     end
 
     ##
+    # @return [Array<String>]
+    def column_families
+      [column_family]
+    end
+
+    ##
     # @return [String]
     def column_family
-      @options[:family] || 'RDF'
+      @options[:column_family] || 'RDF'
     end
 
     ##
@@ -46,13 +52,18 @@ module RDF::Cassandra
     # @private
     def each_statement(&block)
       if block_given?
-        @keyspace.get_range(column_family).each do |slice|
-          subject = RDF::Resource.new(slice.key.to_s)
-          slice.columns.each do |column_or_supercolumn|
-            column    = column_or_supercolumn.column
-            predicate = RDF::URI.new(column.name.to_s)
-            object    = RDF::NTriples.unserialize(column.value.to_s)
-            block.call(RDF::Statement.new(subject, predicate, object))
+        column_families.each do |column_family|
+          @keyspace.get_range(column_family).each do |slice|
+            subject = RDF::Resource.new(slice.key.to_s)
+            slice.columns.each do |column_or_supercolumn|
+              column    = column_or_supercolumn.column || column_or_supercolumn.super_column
+              columns   = !column.respond_to?(:columns) ? [column] : column.columns
+              predicate = RDF::URI.new(column.name.to_s)
+              columns.each do |column|
+                object = RDF::NTriples.unserialize(column.value.to_s)
+                block.call(RDF::Statement.new(subject, predicate, object))
+              end
+            end
           end
         end
       else
@@ -65,8 +76,10 @@ module RDF::Cassandra
     # @private
     def each_subject(&block)
       if block_given?
-        @keyspace.get_range(column_family).each do |slice|
-          block.call(RDF::Resource.new(slice.key.to_s))
+        column_families.each do |column_family|
+          @keyspace.get_range(column_family).each do |slice|
+            block.call(RDF::Resource.new(slice.key.to_s))
+          end
         end
       else
         enum_subject
@@ -79,13 +92,15 @@ module RDF::Cassandra
     def each_predicate(&block)
       if block_given?
         values = {}
-        @keyspace.get_range(column_family).each do |slice|
-          slice.columns.each do |column_or_supercolumn|
-            column = column_or_supercolumn.column
-            value  = column.name.to_s
-            unless values.include?(value)
-              values[value] = true
-              block.call(RDF::URI.new(value))
+        column_families.each do |column_family|
+          @keyspace.get_range(column_family).each do |slice|
+            slice.columns.each do |column_or_supercolumn|
+              column = column_or_supercolumn.column || column_or_supercolumn.super_column
+              value  = column.name.to_s
+              unless values.include?(value)
+                values[value] = true
+                block.call(RDF::URI.new(value))
+              end
             end
           end
         end
@@ -98,8 +113,11 @@ module RDF::Cassandra
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
+      # {keyspace => {column_family => {key     => {supercolumn => {column    => value}}}}}
+      # {keyspace => {column_family => {subject => {predicate   => {object_id => object}}}}}
+      value = RDF::NTriples.serialize(statement.object)
       @keyspace.insert(column_family, statement.subject.to_s, {
-        statement.predicate.to_s => RDF::NTriples.serialize(statement.object)
+        statement.predicate.to_s => {Digest::SHA1.hexdigest(value) => value}
       })
     end
 
