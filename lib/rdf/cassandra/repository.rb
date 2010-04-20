@@ -170,7 +170,8 @@ module RDF::Cassandra
     # @see RDF::Mutable#delete_statement
     # @private
     def delete_statement(statement)
-      # TODO
+      value = RDF::NTriples.serialize(statement.object)
+      @keyspace.remove(column_family, statement.subject.to_s, statement.predicate.to_s, Digest::SHA1.hexdigest(value))
     end
 
     ##
