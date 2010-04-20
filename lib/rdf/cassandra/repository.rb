@@ -127,5 +127,14 @@ module RDF::Cassandra
     def delete_statement(statement)
       # TODO
     end
+
+    ##
+    # @see RDF::Mutable#clear_statements
+    # @private
+    def clear_statements
+      column_families.each do |column_family|
+        @keyspace.clear_column_family!(column_family)
+      end
+    end
   end
 end
