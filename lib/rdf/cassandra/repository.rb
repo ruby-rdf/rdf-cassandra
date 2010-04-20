@@ -14,10 +14,10 @@ module RDF::Cassandra
     # @yieldparam [Repository] repository
     def initialize(options = {}, &block)
       super(options) do
-        @keyspace = ::Cassandra.new({
+        @keyspace = ::Cassandra.new(
           options[:keyspace] || 'RDF',
-          options[:servers]  || '127.0.0.1:9160',
-        })
+          options[:servers]  || '127.0.0.1:9160'
+        )
 
         if block_given?
           case block.arity
@@ -29,6 +29,12 @@ module RDF::Cassandra
     end
 
     ##
+    # @return [String]
+    def column_family
+      @options[:family] || 'RDF'
+    end
+
+    ##
     # @see RDF::Enumerable#each
     # @private
     def each(&block)
@@ -36,10 +42,25 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#each_subject
+    # @private
+    def each_subject(&block)
+      if block_given?
+        @keyspace.get_range(column_family).each do |slice|
+          block.call(RDF::Resource.new(slice.key.to_s))
+        end
+      else
+        Enumerator.new(self, :each_subject)
+      end
+    end
+
+    ##
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
-      # TODO
+      @keyspace.insert(column_family, statement.subject.to_s, {
+        statement.predicate.to_s => RDF::NTriples.serialize(statement.object)
+      })
     end
 
     ##
