@@ -5,6 +5,7 @@ This is an [RDF.rb][] plugin that adds support for storing RDF data in the
 [Apache Cassandra][Cassandra] distributed database management system.
 
 * <http://github.com/bendiken/rdf-cassandra>
+* <http://blog.datagraph.org/2010/04/rdf-nosql-diff>
 
 Features
 --------
