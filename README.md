@@ -124,7 +124,7 @@ Documentation
 Dependencies
 ------------
 
-* [RDF.rb](http://rubygems.org/gems/rdf) (>= 0.1.8)
+* [RDF.rb](http://rubygems.org/gems/rdf) (>= 0.1.9)
 * [Cassandra for Ruby](http://rubygems.org/gems/cassandra) (>= 0.8.2)
 * [Cassandra][] (>= 0.6.0)
 
