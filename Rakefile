@@ -33,6 +33,12 @@ task :extract => "tmp/#{CASSANDRA_DIR}"
 desc "Download and setup a local Cassandra server."
 task :setup => [:fetch, :extract]
 
+desc "Removes everything in tmp/commitlog and tmp/data."
+task :reset do
+  sh "rm -rf tmp/commitlog"
+  sh "rm -rf tmp/data"
+end
+
 namespace :server do
   desc "Start a Cassandra server daemonized."
   task :start do
