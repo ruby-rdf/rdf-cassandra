@@ -2,21 +2,25 @@ module RDF::Cassandra
   ##
   # @see RDF::Repository
   class Repository < RDF::Repository
+    DEFAULT_SERVERS       = '127.0.0.1:9160'
+    DEFAULT_KEYSPACE      = 'RDF'
+    DEFAULT_COLUMN_FAMILY = 'Resources'
+
     # @return [Cassandra]
     attr_reader :keyspace
 
     ##
     # @param  [Hash{Symbol => Object}] options
-    # @option options [String, #to_s] :keyspace      ("RDF")
     # @option options [String, #to_s] :servers       ("127.0.0.1:9160")
-    # @option options [String, #to_s] :column_family ("RDF")
+    # @option options [String, #to_s] :keyspace      ("RDF")
+    # @option options [String, #to_s] :column_family ("Resources")
     # @yield  [repository]
     # @yieldparam [Repository] repository
     def initialize(options = {}, &block)
       super(options) do
         @keyspace = ::Cassandra.new(
-          options[:keyspace] || 'RDF',
-          options[:servers]  || '127.0.0.1:9160'
+          options[:keyspace] || DEFAULT_KEYSPACE,
+          options[:servers]  || DEFAULT_SERVERS
         )
 
         if block_given?
@@ -37,7 +41,7 @@ module RDF::Cassandra
     ##
     # @return [String]
     def column_family
-      @options[:column_family] || 'RDF'
+      @options[:column_family] || DEFAULT_COLUMN_FAMILY
     end
 
     ##

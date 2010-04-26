@@ -23,7 +23,7 @@ Examples
 
     require 'rdf/cassandra'
 
-### Connecting to a local Cassandra server
+### Connecting to a Cassandra server running on `localhost`
 
     repository = RDF::Cassandra::Repository.new
 
@@ -31,28 +31,36 @@ Examples
 
     repository = RDF::Cassandra::Repository.new(:servers => "127.0.0.1:9160")
 
-### Configuring the Cassandra keyspace and column family to use
+### Configuring the Cassandra keyspace and column family
 
     repository = RDF::Cassandra::Repository.new({
       :keyspace      => "MyApplication",  # defaults to "RDF"
-      :column_family => "MyRepository",   # defaults to "RDF"
+      :column_family => "MyRepository",   # defaults to "Resources"
     })
 
 Configuration
 -------------
 
 As of Cassandra 0.6, all keyspaces and column families must be predeclared
-in `storage-conf.xml`. The following configuration snippet matches the
-default `RDF::Cassandra` options:
+in `storage-conf.xml`. You can think of each used Cassandra supercolumn
+family as being equivalent to an RDF repository, so you'll want to configure
+as many as you are likely to need.
+
+The following configuration snippet matches the default options for constructing
+an `RDF::Cassandra::Repository` instance:
 
     <Keyspaces>
       <Keyspace Name="RDF">
-        <ColumnFamily Name="RDF"
-          ColumnType="Super"
-          CompareWith="UTF8Type"
-          CompareSubcolumnsWith="UTF8Type"/>
+        <ColumnFamily Name="Resources"
+                      ColumnType="Super"
+                      CompareWith="UTF8Type"
+                      CompareSubcolumnsWith="UTF8Type"
+                      Comment="RDF data."/>
       </Keyspace>
     </Keyspaces>
+
+See `etc/storage-conf.xml` for a full configuration file example compatible
+with Cassandra 0.6.
 
 Data Model
 ----------
