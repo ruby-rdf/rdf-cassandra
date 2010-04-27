@@ -25,6 +25,8 @@ end
 
 file "tmp/#{CASSANDRA_DIR}" => "tmp/#{CASSANDRA_TARBALL}" do
   sh "tar -xzf tmp/#{CASSANDRA_TARBALL} -C tmp"
+  sh "cp -p etc/log4j.properties tmp/#{CASSANDRA_DIR}/conf"
+  sh "cp -p etc/storage-conf.xml tmp/#{CASSANDRA_DIR}/conf"
 end
 
 task :fetch   => "tmp/#{CASSANDRA_TARBALL}"
@@ -37,6 +39,7 @@ desc "Removes everything in tmp/commitlog and tmp/data."
 task :reset do
   sh "rm -rf tmp/commitlog"
   sh "rm -rf tmp/data"
+  sh "rm -f tmp/server.log"
 end
 
 namespace :server do
