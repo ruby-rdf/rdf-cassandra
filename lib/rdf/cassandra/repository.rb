@@ -57,9 +57,10 @@ module RDF::Cassandra
     # @see RDF::Enumerable#count
     # @private
     def count
+      # TODO: https://issues.apache.org/jira/browse/CASSANDRA-744
       count = 0
-      each_predicate do |predicate|
-        each_subject do |subject|
+      each_subject do |subject|
+        each_predicate(:subject => subject) do |predicate|
           column_families.each do |column_family|
             count += @keyspace.count_columns(column_family, subject.to_s, predicate.to_s)
           end
@@ -78,7 +79,7 @@ module RDF::Cassandra
     ##
     # @see RDF::Enumerable#each_statement
     # @private
-    def each_statement(&block)
+    def each_statement(options = {}, &block)
       if block_given?
         column_families.each do |column_family|
           @keyspace.get_range(column_family).each do |slice|
@@ -102,7 +103,7 @@ module RDF::Cassandra
     ##
     # @see RDF::Enumerable#each_subject
     # @private
-    def each_subject(&block)
+    def each_subject(options = {}, &block)
       if block_given?
         column_families.each do |column_family|
           @keyspace.get_range(column_family).each do |slice|
@@ -119,7 +120,7 @@ module RDF::Cassandra
     ##
     # @see RDF::Enumerable#each_predicate
     # @private
-    def each_predicate(&block)
+    def each_predicate(options = {}, &block)
       if block_given?
         values = {}
         column_families.each do |column_family|
@@ -142,7 +143,7 @@ module RDF::Cassandra
     ##
     # @see RDF::Enumerable#each_object
     # @private
-    def each_object(&block)
+    def each_object(options = {}, &block)
       if block_given?
         values = {}
         column_families.each do |column_family|
@@ -182,14 +183,14 @@ module RDF::Cassandra
     ##
     # @see RDF::Enumerable#each_context
     # @private
-    def each_context(&block)
+    def each_context(options = {}, &block)
       enum_context unless block_given?
     end
 
     ##
     # @see RDF::Enumerable#each_graph
     # @private
-    def each_graph(&block)
+    def each_graph(options = {}, &block)
       if block_given?
         block.call(RDF::Graph.new(nil, :data => self))
       else
