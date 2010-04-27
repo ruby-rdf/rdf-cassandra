@@ -216,7 +216,13 @@ module RDF::Cassandra
     # @see RDF::Queryable#query_pattern
     # @private
     def query_pattern(pattern, &block)
-      each_key_slice do |key_slice|
+      options = case
+        when pattern.has_subject?
+          {:first_key => pattern.subject.to_s, :count => 1, :slice_size => 1}
+        else {}
+      end
+
+      each_key_slice(options) do |key_slice|
         subject = RDF::Resource.new(key_slice.key.to_s)
         if !pattern.has_subject? || subject == pattern.subject
           key_slice.columns.each do |column_or_supercolumn|
@@ -277,17 +283,29 @@ module RDF::Cassandra
     def each_key_slice(options = {}, &block)
       if block_given?
         column_families.each do |column_family|
-          start_key = nil
+          first_key  = options[:first_key]
+          start_key  = nil
+          count      = options[:count] || nil
+          slice_size = options[:slice_size] || self.slice_size
           loop do
-            key_slices = @keyspace.get_range(column_family, :start => start_key, :count => slice_size)
+            key_slices = @keyspace.get_range(column_family, :start => start_key || first_key, :count => slice_size)
             key_slices.shift if start_key # start key is inclusive
             break if key_slices.empty?
-            key_slices.each(&block)
+
+            if count
+              key_slices.each do |key_slice|
+                block.call(key_slice)
+                return if (count -= 1).zero?
+              end
+            else
+              key_slices.each(&block)
+            end
+
             start_key = key_slices.last.key
           end
         end
       else
-        Enumerator.new(self, :each_key_slice)
+        Enumerator.new(self, :each_key_slice, options)
       end
     end
 
