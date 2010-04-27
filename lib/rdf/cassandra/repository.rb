@@ -199,7 +199,7 @@ module RDF::Cassandra
       # {keyspace => {column_family => {subject => {predicate   => {object_id => object}}}}}
       value = RDF::NTriples.serialize(statement.object)
       @keyspace.insert(column_family, statement.subject.to_s, {
-        statement.predicate.to_s => {Digest::SHA1.hexdigest(value) => value}
+        statement.predicate.to_s => {sha1(value) => value}
       })
     end
 
@@ -208,7 +208,7 @@ module RDF::Cassandra
     # @private
     def delete_statement(statement)
       value = RDF::NTriples.serialize(statement.object)
-      @keyspace.remove(column_family, statement.subject.to_s, statement.predicate.to_s, Digest::SHA1.hexdigest(value))
+      @keyspace.remove(column_family, statement.subject.to_s, statement.predicate.to_s, sha1(value))
     end
 
     ##
@@ -244,6 +244,13 @@ module RDF::Cassandra
       else
         Enumerator.new(self, :each_key_slice)
       end
+    end
+
+    ##
+    # @return [String]
+    # @private
+    def sha1(data)
+      Digest::SHA1.digest(data)
     end
   end
 end

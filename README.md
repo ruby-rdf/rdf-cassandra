@@ -54,7 +54,7 @@ an `RDF::Cassandra::Repository` instance:
         <ColumnFamily Name="Resources"
                       ColumnType="Super"
                       CompareWith="UTF8Type"
-                      CompareSubcolumnsWith="UTF8Type"
+                      CompareSubcolumnsWith="BytesType"
                       Comment="RDF data."/>
       </Keyspace>
     </Keyspaces>
