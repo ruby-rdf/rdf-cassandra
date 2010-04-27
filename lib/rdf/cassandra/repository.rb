@@ -192,6 +192,51 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Queryable#query
+    # @private
+    def query(pattern, &block)
+      if block_given?
+        case pattern
+          when RDF::Statement
+            query_pattern(pattern, &block)
+          else super
+        end
+      else
+        raise ArgumentError.new("expected pattern, got #{pattern.inspect}") unless pattern
+        enum = Enumerator.new(self, :query, pattern)
+        enum.extend(RDF::Enumerable, RDF::Queryable)
+        def enum.to_a() super.extend(RDF::Enumerable, RDF::Queryable) end
+        enum
+      end
+    end
+
+    protected
+
+    ##
+    # @see RDF::Queryable#query_pattern
+    # @private
+    def query_pattern(pattern, &block)
+      each_key_slice do |key_slice|
+        subject = RDF::Resource.new(key_slice.key.to_s)
+        if !pattern.has_subject? || subject == pattern.subject
+          key_slice.columns.each do |column_or_supercolumn|
+            column    = column_or_supercolumn.column || column_or_supercolumn.super_column
+            columns   = !column.respond_to?(:columns) ? [column] : column.columns
+            predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
+            if !pattern.has_predicate? || predicate == pattern.predicate
+              columns.each do |column|
+                object = RDF::NTriples.unserialize(column.value.to_s)
+                if !pattern.has_object? || object == pattern.object
+                  block.call(RDF::Statement.new(subject, predicate, object))
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    ##
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
