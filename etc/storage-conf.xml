@@ -7,7 +7,7 @@
    ~ The name of this cluster.  This is mainly used to prevent machines in
    ~ one logical cluster from joining another.
   -->
-  <ClusterName>Test Cluster</ClusterName>
+  <ClusterName>RDF Cluster</ClusterName>
 
   <!--
    ~ Turn on to make new [non-seed] nodes automatically migrate the right data 
