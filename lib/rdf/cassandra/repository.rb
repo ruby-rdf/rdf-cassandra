@@ -150,6 +150,13 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#has_predicate?
+    # @private
+    def has_predicate?(value)
+      super # TODO: optimize this
+    end
+
+    ##
     # @see RDF::Enumerable#each_predicate
     # @private
     def each_predicate(&block)
@@ -168,6 +175,13 @@ module RDF::Cassandra
       else
         enum_predicate
       end
+    end
+
+    ##
+    # @see RDF::Enumerable#has_object?
+    # @private
+    def has_object?(value)
+      super # TODO: optimize this
     end
 
     ##
