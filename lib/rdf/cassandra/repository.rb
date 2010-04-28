@@ -47,6 +47,13 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Durable#durable?
+    # @private
+    def durable?
+      true
+    end
+
+    ##
     # @see RDF::Enumerable#empty?
     # @private
     def empty?
