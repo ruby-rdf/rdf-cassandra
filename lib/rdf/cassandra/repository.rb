@@ -85,6 +85,13 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#has_statement?
+    # @private
+    def has_statement?(statement)
+      !statement.has_context? && has_triple?(statement.to_triple)
+    end
+
+    ##
     # @see RDF::Enumerable#each_statement
     # @private
     def each_statement(&block)
@@ -104,6 +111,20 @@ module RDF::Cassandra
       else
         enum_statement
       end
+    end
+
+    ##
+    # @see RDF::Enumerable#has_triple?
+    # @private
+    def has_triple?(triple)
+      !query(triple).empty? # TODO: simplify this
+    end
+
+    ##
+    # @see RDF::Enumerable#has_quad?
+    # @private
+    def has_quad?(quad)
+      !quad[3] && has_triple?(quad[0...3])
     end
 
     ##
