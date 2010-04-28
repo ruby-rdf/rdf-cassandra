@@ -267,7 +267,11 @@ module RDF::Cassandra
     # @private
     def clear_statements
       column_families.each do |column_family|
-        @keyspace.clear_column_family!(column_family)
+        each_key_slice do |key_slice|
+          @keyspace.remove(column_family, key_slice.key)
+        end
+        # FIXME: this is buggy in Cassandra/Ruby 0.8.2, deleting only 100 rows at a time:
+        #@keyspace.clear_column_family!(column_family)
       end
     end
 
