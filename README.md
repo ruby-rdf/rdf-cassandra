@@ -12,6 +12,8 @@ Features
 
 * Stores RDF statements in a resource-centric manner using one Cassandra
   supercolumn family per RDF repository.
+* Includes a set of Rake tasks that make it easy to download and setup a
+  local development instance of Cassandra.
 
 Limitations
 -----------
@@ -73,8 +75,8 @@ supercolumns, and RDF object terms to Cassandra columns as follows:
     {subject => {predicate   => {object_id => object}}}   # RDF terminology
 
 RDF object terms are stored using their canonical [N-Triples][]
-serialization and are uniquely identified by the SHA-1 fingerprint of that
-representation.
+serialization and are uniquely identified by the binary SHA-1 fingerprint of
+that representation.
 
 For example, here's how some of RDF.rb's [DOAP data][RDF.rb DOAP] would be
 stored using the `RDF::Cassandra` data model:
