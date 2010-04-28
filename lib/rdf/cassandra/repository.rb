@@ -128,6 +128,13 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Enumerable#has_subject?
+    # @private
+    def has_subject?(value)
+      !query([value]).empty? # TODO: simplify this
+    end
+
+    ##
     # @see RDF::Enumerable#each_subject
     # @private
     def each_subject(&block)
