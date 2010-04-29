@@ -158,7 +158,18 @@ module RDF::Cassandra
     # @see RDF::Enumerable#has_subject?
     # @private
     def has_subject?(value)
-      !query([value]).empty? # TODO: simplify this
+      column_families.any? do |column_family|
+        begin
+          slice = @client.get_slice({
+            :key       => value.to_s,
+            :parent    => @client.column_parent(:column_family => column_family.to_s),
+            :predicate => @client.slice_predicate(:slice_range, :start => '', :finish => '', :count => 1),
+          })
+          !slice.empty?
+        rescue CassandraThrift::NotFoundException => e
+          false
+        end
+      end
     end
 
     ##
