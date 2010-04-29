@@ -6,7 +6,6 @@ module RDF::Cassandra
     DEFAULT_KEYSPACE      = :RDF
     DEFAULT_COLUMN_FAMILY = :Resources
     DEFAULT_INDEX_FAMILY  = :Index
-    DEFAULT_SLICE_SIZE    = 100
 
     # @return [Cassandra]
     attr_reader :keyspace
@@ -26,6 +25,7 @@ module RDF::Cassandra
           (options[:keyspace] || DEFAULT_KEYSPACE).to_s,
           (options[:servers]  || DEFAULT_SERVERS)
         )
+        @client = Client.new(keyspace, options)
 
         if block_given?
           case block.arity
@@ -92,7 +92,7 @@ module RDF::Cassandra
       # TODO: https://issues.apache.org/jira/browse/CASSANDRA-744
       count = 0
       column_families.each do |column_family|
-        each_key_slice(column_family) do |key_slice|
+        @client.each_key_slice(column_family) do |key_slice|
           key_slice.columns.each do |column_or_supercolumn|
             column = column_or_supercolumn.column || column_or_supercolumn.super_column
             count += !column.respond_to?(:columns) ? 1 : column.columns.size
@@ -122,7 +122,7 @@ module RDF::Cassandra
     def each_statement(&block)
       if block_given?
         column_families.each do |column_family|
-          each_key_slice(column_family) do |key_slice|
+          @client.each_key_slice(column_family) do |key_slice|
             subject = RDF::Resource.new(key_slice.key.to_s)
             key_slice.columns.each do |column_or_supercolumn|
               column    = column_or_supercolumn.column || column_or_supercolumn.super_column
@@ -170,7 +170,7 @@ module RDF::Cassandra
           enum_subject
         else
           column_families.each do |column_family|
-            each_key_slice(column_family) do |key_slice|
+            @client.each_key_slice(column_family) do |key_slice|
               if @keyspace.count_columns(column_family, key_slice.key.to_s).nonzero?
                 block.call(RDF::Resource.new(key_slice.key.to_s))
               end
@@ -209,10 +209,15 @@ module RDF::Cassandra
     # @private
     def each_predicate_indexed(&block)
       values = {}
-      each_key_slice(index_family(:p)) do |key_slice| # TODO: optimize
-        key_slice.extend(SuperColumnHelpers)
-        if key_slice.has_column?(:ps) # predicate->subject index
-          value = key_slice[:info].columns.first.value.to_s
+      @client.each_key_slice(index_family(:p), :super_column => 'ps', :column_count => 1) do |key_slice|
+        unless key_slice.columns.empty?
+          result = @client.get({
+            :key           => key_slice.key.to_s,
+            :column_family => index_family(:p).to_s,
+            :super_column  => 'info',
+            :column        => [key_slice.key.to_s].pack('H*'), # FIXME after Cassandra 0.7
+          })
+          value = result.column.value.to_s
           unless values.include?(value)
             values[value] = true
             block.call(RDF::NTriples.unserialize(value)) # TODO: use RDF::URI.intern
@@ -226,7 +231,7 @@ module RDF::Cassandra
     def each_predicate_unindexed(&block)
       values = {}
       column_families.each do |column_family|
-        each_key_slice(column_family) do |key_slice|
+        @client.each_key_slice(column_family) do |key_slice|
           key_slice.columns.each do |column_or_supercolumn|
             column = column_or_supercolumn.column || column_or_supercolumn.super_column
             value  = column.name.to_s
@@ -276,7 +281,7 @@ module RDF::Cassandra
     def each_object_unindexed(&block)
       values = {}
       column_families.each do |column_family|
-        each_key_slice(column_family) do |key_slice|
+        @client.each_key_slice(column_family) do |key_slice|
           key_slice.columns.each do |column_or_supercolumn|
             column  = column_or_supercolumn.column || column_or_supercolumn.super_column
             columns = !column.respond_to?(:columns) ? [column] : column.columns
@@ -356,7 +361,7 @@ module RDF::Cassandra
       end
 
       column_families.each do |column_family|
-        each_key_slice(column_family, options) do |key_slice|
+        @client.each_key_slice(column_family, options) do |key_slice|
           subject = RDF::Resource.new(key_slice.key.to_s)
           if !pattern.has_subject? || subject == pattern.subject
             key_slice.columns.each do |column_or_supercolumn|
@@ -404,7 +409,7 @@ module RDF::Cassandra
     # @private
     def clear_statements
       column_families.each do |column_family|
-        each_key_slice(column_family) do |key_slice|
+        @client.each_key_slice(column_family) do |key_slice|
           @keyspace.remove(column_family, key_slice.key)
         end
       end
@@ -415,7 +420,7 @@ module RDF::Cassandra
     # @private
     def clear_indexes
       index_families.each do |index_family|
-        each_key_slice(index_family) do |key_slice|
+        @client.each_key_slice(index_family) do |key_slice|
           @keyspace.remove(index_family, key_slice.key)
         end
       end
@@ -458,12 +463,13 @@ module RDF::Cassandra
     # @private
     def unindex_statement_predicate(statement)
       if has_index?(:ps)
-        subjects = @keyspace.get(index_family(:p), sha1(statement.predicate, :binary => false), 'ps')
+        key = sha1(statement.predicate, :binary => false)
+        subjects = @keyspace.get(index_family(:p), key, 'ps')
         subjects.each do |subject_id, subject|
           subject = RDF::NTriples.unserialize(subject)
           #if query(:subject => subject, :predicate => statement.predicate).empty?
           if column_families.all? { |column_family| @keyspace.get(column_family, subject.to_s, statement.predicate.to_s).empty? }
-            @keyspace.remove(index_family(:p), sha1(statement.predicate, :binary => false), 'ps', sha1(subject))
+            @keyspace.remove(index_family(:p), key, 'ps', sha1(subject))
           end
         end
       end
@@ -494,21 +500,23 @@ module RDF::Cassandra
     # @private
     def unindex_statement_object(statement)
       if has_index?(:os)
-        objects = @keyspace.get(index_family(:o), sha1(statement.object, :binary => false), 'os')
+        key = sha1(statement.object, :binary => false)
+        objects = @keyspace.get(index_family(:o), key, 'os')
         objects.each do |subject_id, subject|
           subject = RDF::NTriples.unserialize(subject)
           if query(:object => statement.object, :subject => subject).empty?
-            @keyspace.remove(index_family(:o), sha1(statement.object, :binary => false), 'os', sha1(subject))
+            @keyspace.remove(index_family(:o), key, 'os', sha1(subject))
           end
         end
       end
 
       if has_index?(:op)
-        objects = @keyspace.get(index_family(:o), sha1(statement.object, :binary => false), 'op')
+        key = sha1(statement.object, :binary => false)
+        objects = @keyspace.get(index_family(:o), key, 'op')
         objects.each do |predicate_id, predicate|
           predicate = RDF::NTriples.unserialize(predicate)
           if query(:object => statement.object, :predicate => predicate).empty?
-            @keyspace.remove(index_family(:o), sha1(statement.object, :binary => false), 'op', sha1(predicate))
+            @keyspace.remove(index_family(:o), key, 'op', sha1(predicate))
           end
         end
       end
@@ -527,43 +535,6 @@ module RDF::Cassandra
     # @private
     def index_family(type)
       @options[:index_family] || DEFAULT_INDEX_FAMILY # TODO
-    end
-
-    ##
-    # @return [Integer]
-    # @private
-    def slice_size
-      @options[:slice_size] || DEFAULT_SLICE_SIZE
-    end
-
-    ##
-    # @private
-    def each_key_slice(column_family, options = {}, &block)
-      if block_given?
-        first_key  = options[:first_key]
-        start_key  = nil
-        count      = options[:count] || nil
-        slice_size = options[:slice_size] || self.slice_size
-
-        loop do
-          key_slices = @keyspace.get_range(column_family, :start => start_key || first_key, :count => slice_size)
-          key_slices.shift if start_key # start key is inclusive
-          break if key_slices.empty?
-
-          if count
-            key_slices.each do |key_slice|
-              block.call(key_slice)
-              return if (count -= 1).zero?
-            end
-          else
-            key_slices.each(&block)
-          end
-
-          start_key = key_slices.last.key
-        end
-      else
-        Enumerator.new(self, :each_key_slice, column_family, options)
-      end
     end
 
     ##
