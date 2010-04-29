@@ -49,6 +49,17 @@
                     Comment="RDF data."/>
 
       <!--
+       ~ This supercolumn family is used for indexing RDF data.
+       ~ 
+       ~ @see http://rdf.rubyforge.org/cassandra/
+      -->
+      <ColumnFamily Name="Index"
+                    ColumnType="Super"
+                    CompareWith="UTF8Type"
+                    CompareSubcolumnsWith="BytesType"
+                    Comment="RDF index."/>
+
+      <!--
        ~ Strategy: Setting this to the class that implements
        ~ IReplicaPlacementStrategy will change the way the node picker works.
        ~ Out of the box, Cassandra provides

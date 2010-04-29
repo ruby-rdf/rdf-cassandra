@@ -3,8 +3,9 @@ module RDF::Cassandra
   # @see RDF::Repository
   class Repository < RDF::Repository
     DEFAULT_SERVERS       = '127.0.0.1:9160'
-    DEFAULT_KEYSPACE      = 'RDF'
-    DEFAULT_COLUMN_FAMILY = 'Resources'
+    DEFAULT_KEYSPACE      = :RDF
+    DEFAULT_COLUMN_FAMILY = :Resources
+    DEFAULT_INDEX_FAMILY  = :Index
     DEFAULT_SLICE_SIZE    = 100
 
     # @return [Cassandra]
@@ -13,16 +14,17 @@ module RDF::Cassandra
     ##
     # @param  [Hash{Symbol => Object}] options
     # @option options [String, #to_s]  :servers       ("127.0.0.1:9160")
-    # @option options [String, #to_s]  :keyspace      ("RDF")
-    # @option options [String, #to_s]  :column_family ("Resources")
+    # @option options [String, #to_s]  :keyspace      (:RDF)
+    # @option options [String, #to_s]  :column_family (:Resources)
+    # @option options [String, #to_s]  :index_family  (:Index)
     # @option options [Integer, #to_i] :slice_size    (100)
     # @yield  [repository]
     # @yieldparam [Repository] repository
     def initialize(options = {}, &block)
       super(options) do
         @keyspace = ::Cassandra.new(
-          options[:keyspace] || DEFAULT_KEYSPACE,
-          options[:servers]  || DEFAULT_SERVERS
+          (options[:keyspace] || DEFAULT_KEYSPACE).to_s,
+          (options[:servers]  || DEFAULT_SERVERS)
         )
 
         if block_given?
@@ -47,6 +49,27 @@ module RDF::Cassandra
     end
 
     ##
+    # @return [Boolean]
+    def indexed?
+      @options[:indexed] == true
+    end
+
+    ##
+    # @param  [Symbol, #to_sym]
+    # @return [Boolean]
+    def has_index?(type)
+      indexed? && [:ps, :os, :op].include?(type.to_sym)
+    end
+
+    ##
+    # @return [void]
+    def index!
+      each_statement do |statement|
+        index_statement(statement)
+      end
+    end
+
+    ##
     # @see RDF::Durable#durable?
     # @private
     def durable?
@@ -68,10 +91,12 @@ module RDF::Cassandra
     def count
       # TODO: https://issues.apache.org/jira/browse/CASSANDRA-744
       count = 0
-      each_key_slice do |key_slice|
-        key_slice.columns.each do |column_or_supercolumn|
-          column = column_or_supercolumn.column || column_or_supercolumn.super_column
-          count += !column.respond_to?(:columns) ? 1 : column.columns.size
+      column_families.each do |column_family|
+        each_key_slice(column_family) do |key_slice|
+          key_slice.columns.each do |column_or_supercolumn|
+            column = column_or_supercolumn.column || column_or_supercolumn.super_column
+            count += !column.respond_to?(:columns) ? 1 : column.columns.size
+          end
         end
       end
       count
@@ -96,15 +121,17 @@ module RDF::Cassandra
     # @private
     def each_statement(&block)
       if block_given?
-        each_key_slice do |key_slice|
-          subject = RDF::Resource.new(key_slice.key.to_s)
-          key_slice.columns.each do |column_or_supercolumn|
-            column    = column_or_supercolumn.column || column_or_supercolumn.super_column
-            columns   = !column.respond_to?(:columns) ? [column] : column.columns
-            predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
-            columns.each do |column|
-              object = RDF::NTriples.unserialize(column.value.to_s)
-              block.call(RDF::Statement.new(subject, predicate, object))
+        column_families.each do |column_family|
+          each_key_slice(column_family) do |key_slice|
+            subject = RDF::Resource.new(key_slice.key.to_s)
+            key_slice.columns.each do |column_or_supercolumn|
+              column    = column_or_supercolumn.column || column_or_supercolumn.super_column
+              columns   = !column.respond_to?(:columns) ? [column] : column.columns
+              predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
+              columns.each do |column|
+                object = RDF::NTriples.unserialize(column.value.to_s)
+                block.call(RDF::Statement.new(subject, predicate, object))
+              end
             end
           end
         end
@@ -114,17 +141,17 @@ module RDF::Cassandra
     end
 
     ##
-    # @see RDF::Enumerable#has_triple?
-    # @private
-    def has_triple?(triple)
-      !query(triple).empty? # TODO: simplify this
-    end
-
-    ##
     # @see RDF::Enumerable#has_quad?
     # @private
     def has_quad?(quad)
       !quad[3] && has_triple?(quad[0...3])
+    end
+
+    ##
+    # @see RDF::Enumerable#has_triple?
+    # @private
+    def has_triple?(triple)
+      !query(triple).empty? # TODO: simplify this
     end
 
     ##
@@ -138,14 +165,17 @@ module RDF::Cassandra
     # @see RDF::Enumerable#each_subject
     # @private
     def each_subject(&block)
-      if block_given?
-        each_key_slice do |key_slice|
-          if @keyspace.count_columns(column_family, key_slice.key.to_s).nonzero?
-            block.call(RDF::Resource.new(key_slice.key.to_s))
+      case
+        when !block_given?
+          enum_subject
+        else
+          column_families.each do |column_family|
+            each_key_slice(column_family) do |key_slice|
+              if @keyspace.count_columns(column_family, key_slice.key.to_s).nonzero?
+                block.call(RDF::Resource.new(key_slice.key.to_s))
+              end
+            end
           end
-        end
-      else
-        enum_subject
       end
     end
 
@@ -153,16 +183,50 @@ module RDF::Cassandra
     # @see RDF::Enumerable#has_predicate?
     # @private
     def has_predicate?(value)
-      super # TODO: optimize this
+      case
+        when has_index?(:ps)
+          super # TODO: use the index
+        else
+          super # TODO: optimize this
+      end
     end
 
     ##
     # @see RDF::Enumerable#each_predicate
     # @private
     def each_predicate(&block)
-      if block_given?
-        values = {}
-        each_key_slice do |key_slice|
+      case
+        when !block_given?
+          enum_predicate
+        when has_index?(:ps)
+          each_predicate_indexed(&block)
+        else
+          each_predicate_unindexed(&block)
+      end
+    end
+
+    ##
+    # @private
+    def each_predicate_indexed(&block)
+      values = {}
+      each_key_slice(index_family(:p)) do |key_slice| # TODO: optimize
+        key_slice.extend(SuperColumnHelpers)
+        if key_slice.has_column?(:ps) # predicate->subject index
+          value = key_slice[:info].columns.first.value.to_s
+          unless values.include?(value)
+            values[value] = true
+            block.call(RDF::NTriples.unserialize(value)) # TODO: use RDF::URI.intern
+          end
+        end
+      end
+    end
+
+    ##
+    # @private
+    def each_predicate_unindexed(&block)
+      values = {}
+      column_families.each do |column_family|
+        each_key_slice(column_family) do |key_slice|
           key_slice.columns.each do |column_or_supercolumn|
             column = column_or_supercolumn.column || column_or_supercolumn.super_column
             value  = column.name.to_s
@@ -172,8 +236,6 @@ module RDF::Cassandra
             end
           end
         end
-      else
-        enum_predicate
       end
     end
 
@@ -181,16 +243,40 @@ module RDF::Cassandra
     # @see RDF::Enumerable#has_object?
     # @private
     def has_object?(value)
-      super # TODO: optimize this
+      case
+        when has_index?(:os)
+          super # TODO: use the index
+        else
+          super # TODO: optimize this
+      end
     end
 
     ##
     # @see RDF::Enumerable#each_object
     # @private
     def each_object(&block)
-      if block_given?
-        values = {}
-        each_key_slice do |key_slice|
+      case
+        when !block_given?
+          enum_object
+        when has_index?(:os)
+          each_object_indexed(&block)
+        else
+          each_object_unindexed(&block)
+      end
+    end
+
+    ##
+    # @private
+    def each_object_indexed(&block)
+      each_object_unindexed(&block) # TODO: use the index
+    end
+
+    ##
+    # @private
+    def each_object_unindexed(&block)
+      values = {}
+      column_families.each do |column_family|
+        each_key_slice(column_family) do |key_slice|
           key_slice.columns.each do |column_or_supercolumn|
             column  = column_or_supercolumn.column || column_or_supercolumn.super_column
             columns = !column.respond_to?(:columns) ? [column] : column.columns
@@ -203,8 +289,6 @@ module RDF::Cassandra
             end
           end
         end
-      else
-        enum_object
       end
     end
 
@@ -271,18 +355,20 @@ module RDF::Cassandra
         else {}
       end
 
-      each_key_slice(options) do |key_slice|
-        subject = RDF::Resource.new(key_slice.key.to_s)
-        if !pattern.has_subject? || subject == pattern.subject
-          key_slice.columns.each do |column_or_supercolumn|
-            column    = column_or_supercolumn.column || column_or_supercolumn.super_column
-            columns   = !column.respond_to?(:columns) ? [column] : column.columns
-            predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
-            if !pattern.has_predicate? || predicate == pattern.predicate
-              columns.each do |column|
-                object = RDF::NTriples.unserialize(column.value.to_s)
-                if !pattern.has_object? || object == pattern.object
-                  block.call(RDF::Statement.new(subject, predicate, object))
+      column_families.each do |column_family|
+        each_key_slice(column_family, options) do |key_slice|
+          subject = RDF::Resource.new(key_slice.key.to_s)
+          if !pattern.has_subject? || subject == pattern.subject
+            key_slice.columns.each do |column_or_supercolumn|
+              column    = column_or_supercolumn.column || column_or_supercolumn.super_column
+              columns   = !column.respond_to?(:columns) ? [column] : column.columns
+              predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
+              if !pattern.has_predicate? || predicate == pattern.predicate
+                columns.each do |column|
+                  object = RDF::NTriples.unserialize(column.value.to_s)
+                  if !pattern.has_object? || object == pattern.object
+                    block.call(RDF::Statement.new(subject, predicate, object))
+                  end
                 end
               end
             end
@@ -299,16 +385,18 @@ module RDF::Cassandra
       # {keyspace => {column_family => {subject => {predicate   => {object_id => object}}}}}
       value = RDF::NTriples.serialize(statement.object)
       @keyspace.insert(column_family, statement.subject.to_s, {
-        statement.predicate.to_s => {sha1(value) => value}
+        statement.predicate.to_s => sha1_column(statement.object)
       })
+      index_statement(statement) if indexed?
     end
 
     ##
     # @see RDF::Mutable#delete_statement
     # @private
     def delete_statement(statement)
-      value = RDF::NTriples.serialize(statement.object)
-      @keyspace.remove(column_family, statement.subject.to_s, statement.predicate.to_s, sha1(value))
+      @keyspace.remove(column_family, statement.subject.to_s,
+        statement.predicate.to_s, sha1(statement.object))
+      unindex_statement(statement) if indexed?
     end
 
     ##
@@ -316,12 +404,129 @@ module RDF::Cassandra
     # @private
     def clear_statements
       column_families.each do |column_family|
-        each_key_slice do |key_slice|
+        each_key_slice(column_family) do |key_slice|
           @keyspace.remove(column_family, key_slice.key)
         end
-        # FIXME: this is buggy in Cassandra/Ruby 0.8.2, deleting only 100 rows at a time:
-        #@keyspace.clear_column_family!(column_family)
       end
+      clear_indexes
+    end
+
+    ##
+    # @private
+    def clear_indexes
+      index_families.each do |index_family|
+        each_key_slice(index_family) do |key_slice|
+          @keyspace.remove(index_family, key_slice.key)
+        end
+      end
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def index_statement(statement)
+      index_statement_predicate(statement)
+      index_statement_object(statement)
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def unindex_statement(statement)
+      unindex_statement_object(statement)
+      unindex_statement_predicate(statement)
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def index_statement_predicate(statement)
+      if has_index?(:ps)
+        @keyspace.insert(index_family(:p), sha1(statement.predicate, :binary => false), {
+          'info' => sha1_column(statement.predicate),
+          'ps'   => sha1_column(statement.subject),
+        })
+      end
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def unindex_statement_predicate(statement)
+      if has_index?(:ps)
+        subjects = @keyspace.get(index_family(:p), sha1(statement.predicate, :binary => false), 'ps')
+        subjects.each do |subject_id, subject|
+          subject = RDF::NTriples.unserialize(subject)
+          #if query(:subject => subject, :predicate => statement.predicate).empty?
+          if column_families.all? { |column_family| @keyspace.get(column_family, subject.to_s, statement.predicate.to_s).empty? }
+            @keyspace.remove(index_family(:p), sha1(statement.predicate, :binary => false), 'ps', sha1(subject))
+          end
+        end
+      end
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def index_statement_object(statement)
+      case
+        when has_index?(:os) && has_index?(:op)
+          @keyspace.insert(index_family(:o), sha1(statement.object, :binary => false), {
+            'info' => sha1_column(statement.object),
+            'os'   => sha1_column(statement.subject),
+            'op'   => sha1_column(statement.predicate),
+          })
+        when has_index?(:os)
+          # TODO
+        when has_index?(:op)
+          # TODO
+      end
+    end
+
+    ##
+    # @param  [RDF::Statement] statement
+    # @return [void]
+    # @private
+    def unindex_statement_object(statement)
+      if has_index?(:os)
+        objects = @keyspace.get(index_family(:o), sha1(statement.object, :binary => false), 'os')
+        objects.each do |subject_id, subject|
+          subject = RDF::NTriples.unserialize(subject)
+          if query(:object => statement.object, :subject => subject).empty?
+            @keyspace.remove(index_family(:o), sha1(statement.object, :binary => false), 'os', sha1(subject))
+          end
+        end
+      end
+
+      if has_index?(:op)
+        objects = @keyspace.get(index_family(:o), sha1(statement.object, :binary => false), 'op')
+        objects.each do |predicate_id, predicate|
+          predicate = RDF::NTriples.unserialize(predicate)
+          if query(:object => statement.object, :predicate => predicate).empty?
+            @keyspace.remove(index_family(:o), sha1(statement.object, :binary => false), 'op', sha1(predicate))
+          end
+        end
+      end
+    end
+
+    ##
+    # @return [Enumerable<Symbol>]
+    # @private
+    def index_families
+      [index_family(:p), index_family(:o)].compact.uniq
+    end
+
+    ##
+    # @param  [Symbol, #to_sym] type
+    # @return [Symbol]
+    # @private
+    def index_family(type)
+      @options[:index_family] || DEFAULT_INDEX_FAMILY # TODO
     end
 
     ##
@@ -333,40 +538,65 @@ module RDF::Cassandra
 
     ##
     # @private
-    def each_key_slice(options = {}, &block)
+    def each_key_slice(column_family, options = {}, &block)
       if block_given?
-        column_families.each do |column_family|
-          first_key  = options[:first_key]
-          start_key  = nil
-          count      = options[:count] || nil
-          slice_size = options[:slice_size] || self.slice_size
-          loop do
-            key_slices = @keyspace.get_range(column_family, :start => start_key || first_key, :count => slice_size)
-            key_slices.shift if start_key # start key is inclusive
-            break if key_slices.empty?
+        first_key  = options[:first_key]
+        start_key  = nil
+        count      = options[:count] || nil
+        slice_size = options[:slice_size] || self.slice_size
 
-            if count
-              key_slices.each do |key_slice|
-                block.call(key_slice)
-                return if (count -= 1).zero?
-              end
-            else
-              key_slices.each(&block)
+        loop do
+          key_slices = @keyspace.get_range(column_family, :start => start_key || first_key, :count => slice_size)
+          key_slices.shift if start_key # start key is inclusive
+          break if key_slices.empty?
+
+          if count
+            key_slices.each do |key_slice|
+              block.call(key_slice)
+              return if (count -= 1).zero?
             end
-
-            start_key = key_slices.last.key
+          else
+            key_slices.each(&block)
           end
+
+          start_key = key_slices.last.key
         end
       else
-        Enumerator.new(self, :each_key_slice, options)
+        Enumerator.new(self, :each_key_slice, column_family, options)
+      end
+    end
+
+    ##
+    # @return [Hash{String => String}]
+    # @private
+    def sha1_column(value, options = {})
+      if data = RDF::NTriples.serialize(value)
+        {Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, data) => data}
       end
     end
 
     ##
     # @return [String]
     # @private
-    def sha1(data)
-      Digest::SHA1.digest(data)
+    def sha1(value, options = {})
+      Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, RDF::NTriples.serialize(value))
+    end
+
+    ##
+    # @private
+    module SuperColumnHelpers
+      def has_column?(name)
+        !!self[name]
+      end
+
+      def [](name)
+        name = name.to_s
+        columns.each do |column_or_supercolumn|
+          column = column_or_supercolumn.column || column_or_supercolumn.super_column
+          return column.extend(SuperColumnHelpers) if column.name.to_s == name
+        end
+        return nil
+      end
     end
   end
 end

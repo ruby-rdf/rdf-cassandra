@@ -3,7 +3,7 @@ require 'rdf/spec/repository'
 
 describe RDF::Cassandra::Repository do
   before :each do
-    @repository = RDF::Cassandra::Repository.new
+    @repository = RDF::Cassandra::Repository.new(:indexed => false)
     @repository.clear
   end
 
