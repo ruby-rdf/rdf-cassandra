@@ -273,7 +273,22 @@ module RDF::Cassandra
     ##
     # @private
     def each_object_indexed(&block)
-      each_object_unindexed(&block) # TODO: use the index
+      values = {}
+      @client.each_key_slice(index_family(:o), :super_column => 'os', :column_count => 1) do |key_slice|
+        unless key_slice.columns.empty?
+          result = @client.get({
+            :key           => key_slice.key.to_s,
+            :column_family => index_family(:o).to_s,
+            :super_column  => 'info',
+            :column        => [key_slice.key.to_s].pack('H*'), # FIXME after Cassandra 0.7
+          })
+          value = result.column.value.to_s
+          unless values.include?(value)
+            values[value] = true
+            block.call(RDF::NTriples.unserialize(value))
+          end
+        end
+      end
     end
 
     ##
