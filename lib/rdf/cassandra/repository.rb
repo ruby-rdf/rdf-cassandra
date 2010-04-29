@@ -185,7 +185,15 @@ module RDF::Cassandra
     def has_predicate?(value)
       case
         when has_index?(:ps)
-          super # TODO: use the index
+          begin
+            !!@client.get({
+              :key           => sha1(value, :binary => false),
+              :column_family => index_family(:p).to_s,
+              :super_column  => :info.to_s,
+            })
+          rescue CassandraThrift::NotFoundException => e
+            false
+          end
         else
           super # TODO: optimize this
       end
@@ -214,7 +222,7 @@ module RDF::Cassandra
           result = @client.get({
             :key           => key_slice.key.to_s,
             :column_family => index_family(:p).to_s,
-            :super_column  => 'info',
+            :super_column  => :info.to_s,
             :column        => [key_slice.key.to_s].pack('H*'), # FIXME after Cassandra 0.7
           })
           value = result.column.value.to_s
@@ -250,7 +258,15 @@ module RDF::Cassandra
     def has_object?(value)
       case
         when has_index?(:os)
-          super # TODO: use the index
+          begin
+            !!@client.get({
+              :key           => sha1(value, :binary => false),
+              :column_family => index_family(:o).to_s,
+              :super_column  => :info.to_s,
+            })
+          rescue CassandraThrift::NotFoundException => e
+            false
+          end
         else
           super # TODO: optimize this
       end
@@ -279,7 +295,7 @@ module RDF::Cassandra
           result = @client.get({
             :key           => key_slice.key.to_s,
             :column_family => index_family(:o).to_s,
-            :super_column  => 'info',
+            :super_column  => :info.to_s,
             :column        => [key_slice.key.to_s].pack('H*'), # FIXME after Cassandra 0.7
           })
           value = result.column.value.to_s
