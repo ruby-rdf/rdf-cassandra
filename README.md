@@ -12,10 +12,15 @@ Features
 
 * Stores RDF statements in a resource-centric manner using one Cassandra
   supercolumn family per RDF repository.
-* Optimized for resource-oriented access patterns to RDF statements about a
-  particular subject.
+* Inherits Cassandra's characteristics of high availability, eventual
+  consistency, and horizontal scalability.
 * Optimized for write-heavy workloads with no need to perform a read before
   inserting or deleting an RDF statement.
+* Optimized for resource-oriented access patterns to RDF statements about a
+  particular subject.
+* Partitions RDF data across the Cassandra cluster based on subject URIs,
+  improving data locality when accessing statements about a particular
+  subject.
 * Includes a set of Rake tasks that make it easy to download and setup a
   local development instance of Cassandra.
 
