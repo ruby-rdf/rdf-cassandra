@@ -90,11 +90,23 @@ module RDF::Cassandra
     end
 
     ##
-    # @see RDF::Enumerable#empty?
-    # @private
-    def empty?
+    # Returns `true` if this repository contains no RDF statements.
+    #
+    # Since Cassandra row keys stick around even after they've been deleted,
+    # this can be an expensive operation in the worst case where the
+    # repository contains mostly or only deleted resources. If you're
+    # satisfied with a probabilistic answer as to whether the repository is
+    # empty, pass in an integer value to the `:sample` option to indicate
+    # the maximum number of resources (i.e. row keys) to be examined.
+    #
+    # @param  [Hash{Symbol => Object}] options
+    # @option options [Integer, #to_i] :sample (nil)
+    # @return [Boolean]
+    def empty?(options = {})
       column_families.all? do |column_family|
-        @keyspace.count_range(column_family).to_i.zero?
+        key_count  = !options[:sample] ? nil : (options[:sample].to_i rescue 1_000)
+        key_slices = @client.each_key_slice(column_family, :count => key_count, :column_count => 1)
+        key_slices.all? { |key_slice| key_slice.columns.empty? }
       end
     end
 
@@ -396,7 +408,7 @@ module RDF::Cassandra
         end
       else
         raise ArgumentError.new("expected pattern, got #{pattern.inspect}") unless pattern
-        enum = Enumerator.new(self, :query, pattern)
+        enum = RDF::Enumerator.new(self, :query, pattern)
         enum.extend(RDF::Enumerable, RDF::Queryable)
         def enum.to_a() super.extend(RDF::Enumerable, RDF::Queryable) end
         enum

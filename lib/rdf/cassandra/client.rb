@@ -30,13 +30,13 @@ module RDF::Cassandra
         options    = options.dup
         first_key  = options.delete(:first_key)
         start_key  = nil
-        count      = options.delete(:count) || nil
+        count      = options.delete(:count)
         slice_size = options.delete(:slice_size) || self.slice_size
 
         loop do
           key_slices = get_range_slices({
             :parent    => column_parent(:column_family => column_family.to_s, :super_column => options[:super_column]),
-            :predicate => slice_predicate(:start => options[:start_column] || '', :finish => options[:end_column] || '', :count => options[:column_count] || 1_000),
+            :predicate => options[:predicate] || slice_predicate(:start => options[:start_column] || '', :finish => options[:end_column] || '', :count => options[:column_count] || 1_000),
             :range     => key_range(:start_key => (start_key || first_key).to_s, :end_key => '', :count => slice_size),
           })
 
@@ -55,7 +55,7 @@ module RDF::Cassandra
           start_key = key_slices.last.key
         end
       else
-        Enumerator.new(self, :each_key_slice, column_family, options)
+        RDF::Enumerator.new(self, :each_key_slice, column_family, options)
       end
     end
 
