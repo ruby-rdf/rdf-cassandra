@@ -12,7 +12,7 @@ module RDF::Cassandra
     # @option options [SuperColumn]    :super_column
     # @return [ColumnOrSuperColumn]
     # @see    http://wiki.apache.org/cassandra/API#ColumnOrSuperColumn
-    def column_or_super_column(options = {})
+    def column_or_supercolumn(options = {})
       options = case options
         when Column      then {:column       => options}
         when SuperColumn then {:super_column => options}
@@ -20,16 +20,17 @@ module RDF::Cassandra
       end
       ColumnOrSuperColumn.new(options.to_hash)
     end
+    alias_method :column_or_super_column, :column_or_supercolumn
 
     ##
     # @param  [Hash{Symbol => Object}] options
     # @option options [String, #to_s]  :name
     # @option options [String, #to_s]  :value
-    # @option options [Integer, #to_i] :timestamp
+    # @option options [Integer, #to_i] :timestamp (Time.stamp)
     # @return [Column]
     # @see    http://wiki.apache.org/cassandra/API#Column
     def column(options = {})
-      Column.new(options.to_hash)
+      Column.new({:timestamp => Time.stamp}.merge(options.to_hash))
     end
 
     ##

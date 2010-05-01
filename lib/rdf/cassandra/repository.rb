@@ -453,12 +453,14 @@ module RDF::Cassandra
     # @see RDF::Mutable#insert_statement
     # @private
     def insert_statement(statement)
-      # {keyspace => {column_family => {key     => {supercolumn => {column    => value}}}}}
-      # {keyspace => {column_family => {subject => {predicate   => {object_id => object}}}}}
-      value = RDF::NTriples.serialize(statement.object)
-      @keyspace.insert(column_family, statement.subject.to_s, {
-        statement.predicate.to_s => sha1_column(statement.object)
-      })
+      timestamp = Time.stamp
+      mutations = []
+      value     = RDF::NTriples.serialize(statement.object)
+      mutations << mutation(column_or_supercolumn(super_column({
+        :name    => statement.predicate.to_s,
+        :columns => [column({:name => sha1(value), :value => value, :timestamp => Time.stamp})],
+      })))
+      @client.batch_mutate(:mutation_map => {statement.subject.to_s => {column_family.to_s => mutations}})
       index_statement(statement) if indexed?
     end
 
@@ -617,7 +619,8 @@ module RDF::Cassandra
     # @return [String]
     # @private
     def sha1(value, options = {})
-      Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, RDF::NTriples.serialize(value))
+      value = value.is_a?(RDF::Value) ? RDF::NTriples.serialize(value) : value
+      Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, value)
     end
   end # class Repository
 end # module RDF::Cassandra
