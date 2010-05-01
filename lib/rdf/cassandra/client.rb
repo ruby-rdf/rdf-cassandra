@@ -1,6 +1,8 @@
 module RDF::Cassandra
   ##
   class Client
+    include Structures
+
     DEFAULT_SLICE_SIZE        = 100
     DEFAULT_CONSISTENCY_LEVEL = 1
 
@@ -34,7 +36,7 @@ module RDF::Cassandra
         loop do
           key_slices = get_range_slices({
             :parent    => column_parent(:column_family => column_family.to_s, :super_column => options[:super_column]),
-            :predicate => slice_predicate(:slice_range, :start => options[:start_column] || '', :finish => options[:end_column] || '', :count => options[:column_count] || 1_000),
+            :predicate => slice_predicate(:start => options[:start_column] || '', :finish => options[:end_column] || '', :count => options[:column_count] || 1_000),
             :range     => key_range(:start_key => (start_key || first_key).to_s, :end_key => '', :count => slice_size),
           })
 
@@ -95,51 +97,11 @@ module RDF::Cassandra
         options[:consistency] || DEFAULT_CONSISTENCY_LEVEL)
     end
 
-    def column_path(options = {})
-      CassandraThrift::ColumnPath.new(options)
-    end
-
-    def column_parent(options = {})
-      CassandraThrift::ColumnParent.new(options)
-    end
-
-    def slice_predicate(type, options_or_column_names)
-      case type = type.to_sym
-        when :slice_range
-          options = options_or_column_names.to_hash
-          CassandraThrift::SlicePredicate.new(type => CassandraThrift::SliceRange.new(options))
-        when :column_names
-          names = options_or_column_names.to_a
-          CassandraThrift::SlicePredicate.new(type => names)
-      end
-    end
-
-    def key_range(options = {})
-      CassandraThrift::KeyRange.new(options)
-    end
-
     ##
     # @return [CassandraThrift::Cassandra::Client]
     # @private
     def client
       @keyspace.send(:client)
     end
-
-    ##
-    # @private
-    module SuperColumnHelpers
-      def has_column?(name)
-        !!self[name]
-      end
-
-      def [](name)
-        name = name.to_s
-        columns.each do |column_or_supercolumn|
-          column = column_or_supercolumn.column || column_or_supercolumn.super_column
-          return column.extend(SuperColumnHelpers) if column.name.to_s == name
-        end
-        return nil
-      end
-    end
-  end
-end
+  end # class Client
+end # module RDF::Cassandra

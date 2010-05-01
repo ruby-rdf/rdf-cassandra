@@ -2,6 +2,8 @@ module RDF::Cassandra
   ##
   # @see RDF::Repository
   class Repository < RDF::Repository
+    include Structures
+
     DEFAULT_SERVERS       = '127.0.0.1:9160'
     DEFAULT_KEYSPACE      = :RDF
     DEFAULT_COLUMN_FAMILY = :Resources
@@ -37,7 +39,7 @@ module RDF::Cassandra
     end
 
     ##
-    # @return [Array<String>]
+    # @return [Enumerable<String>]
     def column_families
       [column_family]
     end
@@ -174,7 +176,7 @@ module RDF::Cassandra
           slice = @client.get_slice({
             :key       => value.to_s,
             :parent    => @client.column_parent(:column_family => column_family.to_s),
-            :predicate => @client.slice_predicate(:slice_range, :start => '', :finish => '', :count => 1),
+            :predicate => @client.slice_predicate(:start => '', :finish => '', :count => 1),
           })
           !slice.empty?
         rescue CassandraThrift::NotFoundException => e
@@ -605,22 +607,5 @@ module RDF::Cassandra
     def sha1(value, options = {})
       Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, RDF::NTriples.serialize(value))
     end
-
-    ##
-    # @private
-    module SuperColumnHelpers
-      def has_column?(name)
-        !!self[name]
-      end
-
-      def [](name)
-        name = name.to_s
-        columns.each do |column_or_supercolumn|
-          column = column_or_supercolumn.column || column_or_supercolumn.super_column
-          return column.extend(SuperColumnHelpers) if column.name.to_s == name
-        end
-        return nil
-      end
-    end
-  end
-end
+  end # class Repository
+end # module RDF::Cassandra
