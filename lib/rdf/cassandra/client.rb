@@ -59,6 +59,8 @@ module RDF::Cassandra
       end
     end
 
+    ##
+    # @see http://wiki.apache.org/cassandra/API#get
     def get(options = {})
       client.get(
         options[:keyspace] || @keyspace.keyspace.to_s,
@@ -68,33 +70,48 @@ module RDF::Cassandra
           :super_column  => options[:super_column],
           :column        => options[:column],
         }),
-        options[:consistency] || DEFAULT_CONSISTENCY_LEVEL)
+        options[:consistency] || consistency_level)
     end
 
+    ##
+    # @see http://wiki.apache.org/cassandra/API#get_slice
     def get_slice(options = {})
       client.get_slice(
         options[:keyspace] || @keyspace.keyspace.to_s,
         options[:key],
         options[:parent],
         options[:predicate],
-        options[:consistency] || DEFAULT_CONSISTENCY_LEVEL)
+        options[:consistency] || consistency_level)
     end
 
+    ##
+    # @see http://wiki.apache.org/cassandra/API#get_count
     def get_count(options = {})
       client.get_count(
         options[:keyspace] || @keyspace.keyspace.to_s,
         options[:key],
         options[:parent],
-        options[:consistency] || DEFAULT_CONSISTENCY_LEVEL)
+        options[:consistency] || consistency_level)
     end
 
+    ##
+    # @see http://wiki.apache.org/cassandra/API#get_range_slices
     def get_range_slices(options = {})
       client.get_range_slices(
         options[:keyspace] || @keyspace.keyspace.to_s,
         options[:parent],
         options[:predicate],
         options[:range],
-        options[:consistency] || DEFAULT_CONSISTENCY_LEVEL)
+        options[:consistency] || consistency_level)
+    end
+
+    ##
+    # @see http://wiki.apache.org/cassandra/API#batch_mutate
+    def batch_mutate(options = {})
+      client.batch_mutate(
+        options[:keyspace] || @keyspace.keyspace.to_s,
+        options[:mutation_map],
+        options[:consistency] || consistency_level)
     end
 
     ##
