@@ -70,6 +70,17 @@ module RDF::Cassandra
     end
 
     ##
+    # @see RDF::Repository#supports?
+    # @private
+    def supports?(feature)
+      case feature.to_sym
+        # We do *not* support contexts / named graphs at this time:
+        when :context then false
+        else super
+      end
+    end
+
+    ##
     # @see RDF::Durable#durable?
     # @private
     def durable?
