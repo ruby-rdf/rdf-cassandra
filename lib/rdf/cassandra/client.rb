@@ -115,6 +115,30 @@ module RDF::Cassandra
     end
 
     ##
+    # @param  [Hash{String => Hash}]   data
+    # @param  [Hash{Symbol => Object}] options
+    # @return [void]
+    def insert_data(data, options = {})
+      timestamp = Time.stamp
+      mutations = {}
+      data.each do |column_family, rows|
+        rows.each do |key, supercolumns|
+          mutations[key] ||= {}
+          mutations[key][column_family] ||= []
+          supercolumns.each do |supercolumn, columns|
+            mutations[key][column_family] << mutation(column_or_supercolumn(super_column({
+              :name    => supercolumn,
+              :columns => columns.map do |column, value|
+                column(:name => column, :value => value, :timestamp => timestamp)
+              end
+            })))
+          end
+        end
+      end
+      batch_mutate(options.merge(:mutation_map => mutations))
+    end
+
+    ##
     # @return [CassandraThrift::Cassandra::Client]
     # @private
     def client
