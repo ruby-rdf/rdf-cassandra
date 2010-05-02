@@ -29,7 +29,7 @@ module RDF::Cassandra
           (options[:keyspace] || DEFAULT_KEYSPACE).to_s,
           (options[:servers]  || DEFAULT_SERVERS)
         )
-        @client = Client.new(keyspace, options)
+        @client = RDF::Cassandra::Client.new(keyspace, options)
 
         if block_given?
           case block.arity
@@ -629,7 +629,7 @@ module RDF::Cassandra
     # @private
     def sha1_column(value, options = {})
       if data = RDF::NTriples.serialize(value)
-        {Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, data) => data}
+        {sha1(data, options) => data}
       end
     end
 
@@ -637,8 +637,9 @@ module RDF::Cassandra
     # @return [String]
     # @private
     def sha1(value, options = {})
-      value = value.is_a?(RDF::Value) ? RDF::NTriples.serialize(value) : value
-      Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, value)
+      value  = value.is_a?(RDF::Value) ? RDF::NTriples.serialize(value) : value
+      digest = Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, value)
+      digest.force_encoding(::Encoding::ASCII_8BIT) if digest.respond_to?(:force_encoding) # for Ruby 1.9+
     end
   end # class Repository
 end # module RDF::Cassandra

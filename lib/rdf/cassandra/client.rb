@@ -119,23 +119,38 @@ module RDF::Cassandra
     # @param  [Hash{Symbol => Object}] options
     # @return [void]
     def insert_data(data, options = {})
-      timestamp = Time.stamp
+      timestamp = Time.stamp # provided by the Cassandra gem
       mutations = {}
       data.each do |column_family, rows|
+        column_family = encode(column_family)
         rows.each do |key, supercolumns|
+          key = encode(key)
           mutations[key] ||= {}
           mutations[key][column_family] ||= []
           supercolumns.each do |supercolumn, columns|
             mutations[key][column_family] << mutation(column_or_supercolumn(super_column({
-              :name    => supercolumn,
+              :name    => encode(supercolumn),
               :columns => columns.map do |column, value|
-                column(:name => column, :value => value, :timestamp => timestamp)
+                column(:name => encode(column), :value => encode(value), :timestamp => timestamp)
               end
             })))
           end
         end
       end
       batch_mutate(options.merge(:mutation_map => mutations))
+    end
+
+    ##
+    # @param  [String] string
+    # @return [String]
+    def encode(string)
+      string = string.to_s unless string.is_a?(String)
+      case
+        when !string.respond_to?(:encoding) then string # for Ruby 1.8.x
+        when string.encoding == ::Encoding::ASCII_8BIT then string
+        when string.encoding == ::Encoding::US_ASCII   then string
+        else string.dup.force_encoding(::Encoding::ASCII_8BIT) rescue string
+      end
     end
 
     ##
