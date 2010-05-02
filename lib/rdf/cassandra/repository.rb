@@ -8,6 +8,8 @@ module RDF::Cassandra
     DEFAULT_KEYSPACE      = :RDF
     DEFAULT_COLUMN_FAMILY = :Resources
     DEFAULT_INDEX_FAMILY  = :Index
+    INSERT_BATCH_SIZE     = 100
+    DELETE_BATCH_SIZE     = 100
 
     # @return [Cassandra]
     attr_reader :keyspace
@@ -66,9 +68,7 @@ module RDF::Cassandra
     ##
     # @return [void]
     def index!
-      each_statement do |statement|
-        index_statement(statement)
-      end
+      index_statements(self)
     end
 
     ##
@@ -450,18 +450,25 @@ module RDF::Cassandra
     end
 
     ##
-    # @see RDF::Mutable#insert_statement
+    # @see RDF::Mutable#insert_statements
     # @private
-    def insert_statement(statement)
-      timestamp = Time.stamp
-      mutations = []
-      value     = RDF::NTriples.serialize(statement.object)
-      mutations << mutation(column_or_supercolumn(super_column({
-        :name    => statement.predicate.to_s,
-        :columns => [column({:name => sha1(value), :value => value, :timestamp => Time.stamp})],
-      })))
-      @client.batch_mutate(:mutation_map => {statement.subject.to_s => {column_family.to_s => mutations}})
-      index_statement(statement) if indexed?
+    def insert_statements(statements)
+      count   = 0
+      inserts = {}
+      statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
+      statements.each do |statement|
+        value  = RDF::NTriples.serialize(statement.object)
+        insert = (inserts[statement.subject.to_s]  ||= {})
+        insert = (insert[statement.predicate.to_s] ||= {})
+        insert[sha1(value)] = value
+        if ((count += 1) % INSERT_BATCH_SIZE).zero?
+          @client.insert_data(column_family.to_s => inserts)
+          inserts = {}
+        end
+        index_statement(statement) if indexed? # FIXME
+      end
+      @client.insert_data(column_family.to_s => inserts) unless inserts.empty?
+      count
     end
 
     ##
@@ -486,12 +493,23 @@ module RDF::Cassandra
     end
 
     ##
+    # @return [void]
     # @private
     def clear_indexes
       index_families.each do |index_family|
         @client.each_key_slice(index_family) do |key_slice|
           @keyspace.remove(index_family, key_slice.key)
         end
+      end
+    end
+
+    ##
+    # @return [void]
+    # @private
+    def index_statements(statements)
+      statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
+      statements.each do |statement|
+        index_statement(statement)
       end
     end
 
