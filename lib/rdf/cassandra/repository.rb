@@ -640,6 +640,7 @@ module RDF::Cassandra
       value  = value.is_a?(RDF::Value) ? RDF::NTriples.serialize(value) : value
       digest = Digest::SHA1.send(options[:binary] == false ? :hexdigest : :digest, value)
       digest.force_encoding(::Encoding::ASCII_8BIT) if digest.respond_to?(:force_encoding) # for Ruby 1.9+
+      digest
     end
   end # class Repository
 end # module RDF::Cassandra
