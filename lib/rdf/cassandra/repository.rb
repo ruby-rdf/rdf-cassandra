@@ -21,13 +21,15 @@ module RDF::Cassandra
     # @option options [String, #to_s]  :column_family (:Resources)
     # @option options [String, #to_s]  :index_family  (:Index)
     # @option options [Integer, #to_i] :slice_size    (100)
+    # @option options [Integer, #to_i] :timeout       (10)
     # @yield  [repository]
     # @yieldparam [Repository] repository
     def initialize(options = {}, &block)
       super(options) do
         @keyspace = ::Cassandra.new(
           (options[:keyspace] || DEFAULT_KEYSPACE).to_s,
-          (options[:servers]  || DEFAULT_SERVERS)
+          (options[:servers]  || DEFAULT_SERVERS),
+          {:timeout => options[:timeout] || 10} # 10 seconds by default
         )
         @client = RDF::Cassandra::Client.new(keyspace, options)
 
