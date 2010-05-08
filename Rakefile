@@ -64,3 +64,40 @@ desc "Launch the Cassandra command-line client."
 task :console do
   sh "#{CASSANDRA_HOME}/bin/cassandra-cli --host #{CASSANDRA_HOST} --port #{CASSANDRA_PORT}"
 end
+
+namespace :nodetool do
+  desc "Run `nodetool info`"
+  task :ring do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 info"
+  end
+
+  desc "Run `nodetool ring`"
+  task :ring do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 ring"
+  end
+
+  desc "Run `nodetool cfstats`"
+  task :cfstats do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 cfstats"
+  end
+
+  desc "Run `nodetool tpstats`"
+  task :tpstats do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 tpstats"
+  end
+
+  desc "Run `nodetool flush`"
+  task :flush do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 flush #{ENV['KEYSPACE'] || 'RDF'}"
+  end
+
+  desc "Run `nodetool compact`"
+  task :compact do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 compact"
+  end
+
+  desc "Run `nodetool cleanup`"
+  task :cleanup do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 cleanup"
+  end
+end
