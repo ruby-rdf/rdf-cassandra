@@ -4,10 +4,12 @@ module RDF::Cassandra
   class Repository < RDF::Repository
     include Structures
 
-    DEFAULT_SERVERS       = '127.0.0.1:9160'
+    DEFAULT_SERVERS       = '127.0.0.1:9160'.freeze
     DEFAULT_KEYSPACE      = :RDF
     DEFAULT_COLUMN_FAMILY = :Resources
     DEFAULT_INDEX_FAMILY  = :Index
+    DEFAULT_CACHE_FAMILY  = :Cache
+    DEFAULT_CACHE_GRAPH   = 'da39a3ee5e6b4b0d3255bfef95601890afd80709'.freeze
     INSERT_BATCH_SIZE     = 100
     DELETE_BATCH_SIZE     = 100
 
@@ -19,7 +21,10 @@ module RDF::Cassandra
     # @option options [String, #to_s]  :servers       ("127.0.0.1:9160")
     # @option options [String, #to_s]  :keyspace      (:RDF)
     # @option options [String, #to_s]  :column_family (:Resources)
+    # @option options [Boolean]        :indexed       (false)
     # @option options [String, #to_s]  :index_family  (:Index)
+    # @option options [Boolean]        :cached        (false)
+    # @option options [String, #to_s]  :cache_family  (:Cache)
     # @option options [Integer, #to_i] :slice_size    (100)
     # @option options [Integer, #to_i] :timeout       (10)
     # @yield  [repository]
@@ -55,10 +60,43 @@ module RDF::Cassandra
     end
 
     ##
+    # @return [Boolean]
+    def cached?
+      @options[:cached] == true
+    end
+
+    ##
+    # @return [Symbol]
+    # @private
+    def cache_family
+      (@options[:cache_family] || DEFAULT_CACHE_FAMILY).to_sym
+    end
+
+    ##
     # @param  [Symbol, #to_sym]
     # @return [Boolean]
     def has_cache?(type)
-      [:count].include?(type.to_sym)
+      cached? && [:count, :statements].include?(type.to_sym)
+    end
+
+    ##
+    # @return [void]
+    def build_cache!
+      cache_statements!(self)
+    end
+
+    ##
+    # @return [Boolean]
+    def indexed?
+      @options[:indexed] == true
+    end
+
+    ##
+    # @param  [Symbol, #to_sym] type
+    # @return [Symbol]
+    # @private
+    def index_family(type = nil)
+      (@options[:index_family] || DEFAULT_INDEX_FAMILY).to_sym # FIXME
     end
 
     ##
@@ -69,15 +107,9 @@ module RDF::Cassandra
     end
 
     ##
-    # @return [Boolean]
-    def indexed?
-      @options[:indexed] == true
-    end
-
-    ##
     # @return [void]
-    def index!
-      index_statements(self)
+    def build_index!
+      index_statements!(self)
     end
 
     ##
@@ -123,6 +155,29 @@ module RDF::Cassandra
     # @see RDF::Enumerable#count
     # @private
     def count
+      case
+        when has_cache?(:count)
+          count_cached
+        else
+          count_uncached
+      end
+    end
+
+    ##
+    # @private
+    def count_cached
+      @client.get_count({
+        :key    => DEFAULT_CACHE_GRAPH,
+        :parent => column_parent({
+          :column_family => cache_family.to_s,
+          :super_column  => :statements.to_s,
+        }),
+      })
+    end
+
+    ##
+    # @private
+    def count_uncached
       # TODO: https://issues.apache.org/jira/browse/CASSANDRA-744
       count = 0
       column_families.each do |column_family|
@@ -464,19 +519,36 @@ module RDF::Cassandra
     def insert_statements(statements)
       count   = 0
       inserts = {}
+      indexes = {}
+      caches  = {}
+
       statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
       statements.each do |statement|
         value  = RDF::NTriples.serialize(statement.object)
         insert = (inserts[statement.subject.to_s]  ||= {})
         insert = (insert[statement.predicate.to_s] ||= {})
         insert[sha1(value)] = value
-        if ((count += 1) % INSERT_BATCH_SIZE).zero?
-          @client.insert_data(column_family.to_s => inserts)
-          inserts = {}
-        end
+
+        cache_statement(statement, caches) if cached?
         index_statement(statement) if indexed? # FIXME
+
+        if ((count += 1) % INSERT_BATCH_SIZE).zero?
+          @client.insert_data({
+            column_family.to_s => inserts,
+            index_family.to_s  => indexes,
+            cache_family.to_s  => caches,
+          })
+          inserts, indexes, caches = {}, {}, {}
+        end
       end
-      @client.insert_data(column_family.to_s => inserts) unless inserts.empty?
+
+      unless inserts.empty?
+        @client.insert_data({
+          column_family.to_s => inserts,
+          index_family.to_s  => indexes,
+          cache_family.to_s  => caches,
+        })
+      end
       count
     end
 
@@ -504,6 +576,13 @@ module RDF::Cassandra
     ##
     # @return [void]
     # @private
+    def clear_caches
+      # TODO
+    end
+
+    ##
+    # @return [void]
+    # @private
     def clear_indexes
       index_families.each do |index_family|
         @client.each_key_slice(index_family) do |key_slice|
@@ -513,13 +592,49 @@ module RDF::Cassandra
     end
 
     ##
+    # @param  [RDF::Enumerable] statements
     # @return [void]
     # @private
-    def index_statements(statements)
+    def cache_statements!(statements)
+      count  = 0
+      caches = {}
       statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
       statements.each do |statement|
-        index_statement(statement)
+        cache_statement(statement, caches)
+        if ((count += 1) % (INSERT_BATCH_SIZE * 2)).zero?
+          @client.insert_data({cache_family.to_s => caches})
+          caches = {}
+        end
       end
+      @client.insert_data({cache_family.to_s => caches}) unless caches.empty?
+      count
+    end
+
+    ##
+    # @param  [RDF::Statement]       statement
+    # @param  [Hash{String => Hash}] caches
+    # @return [Hash{String => Hash}]
+    # @private
+    def cache_statement(statement, caches = {})
+      graph = (caches[DEFAULT_CACHE_GRAPH] ||= {}) # the default graph is identified by SHA1('')
+      count = (graph[:statements.to_s] ||= {})
+      sha1  = Digest::SHA1.digest(RDF::NTriples.serialize(statement))
+      count[sha1] = ''
+      caches
+    end
+
+    ##
+    # @param  [RDF::Enumerable] statements
+    # @return [void]
+    # @private
+    def index_statements!(statements)
+      count = 0
+      statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
+      statements.each do |statement|
+        count += 1
+        index_statement(statement) # FIXME
+      end
+      count
     end
 
     ##
@@ -623,14 +738,6 @@ module RDF::Cassandra
     # @private
     def index_families
       [index_family(:p), index_family(:o)].compact.uniq
-    end
-
-    ##
-    # @param  [Symbol, #to_sym] type
-    # @return [Symbol]
-    # @private
-    def index_family(type)
-      @options[:index_family] || DEFAULT_INDEX_FAMILY # TODO
     end
 
     ##
