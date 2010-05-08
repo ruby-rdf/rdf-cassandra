@@ -55,9 +55,10 @@ module RDF::Cassandra
     end
 
     ##
+    # @param  [Symbol, #to_sym]
     # @return [Boolean]
-    def indexed?
-      @options[:indexed] == true
+    def has_cache?(type)
+      [:count].include?(type.to_sym)
     end
 
     ##
@@ -65,6 +66,12 @@ module RDF::Cassandra
     # @return [Boolean]
     def has_index?(type)
       indexed? && [:ps, :os, :op].include?(type.to_sym)
+    end
+
+    ##
+    # @return [Boolean]
+    def indexed?
+      @options[:indexed] == true
     end
 
     ##
