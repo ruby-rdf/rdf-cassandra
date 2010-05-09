@@ -91,6 +91,11 @@ namespace :nodetool do
     sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 flush #{ENV['KEYSPACE'] || 'RDF'}"
   end
 
+  desc "Run `nodetool drain`"
+  task :drain do
+    sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 drain"
+  end
+
   desc "Run `nodetool compact`"
   task :compact do
     sh "#{CASSANDRA_HOME}/bin/nodetool --host #{CASSANDRA_HOST} --port 8080 compact"
