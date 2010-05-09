@@ -12,6 +12,7 @@ module RDF::Cassandra
     DEFAULT_CACHE_GRAPH   = 'da39a3ee5e6b4b0d3255bfef95601890afd80709'.freeze
     INSERT_BATCH_SIZE     = 100
     DELETE_BATCH_SIZE     = 100
+    CACHE_BATCH_SIZE      = 500
 
     # @return [Cassandra]
     attr_reader :keyspace
@@ -168,10 +169,7 @@ module RDF::Cassandra
     def count_cached
       @client.get_count({
         :key    => DEFAULT_CACHE_GRAPH,
-        :parent => column_parent({
-          :column_family => cache_family.to_s,
-          :super_column  => :statements.to_s,
-        }),
+        :parent => column_parent(:column_family => cache_family.to_s),
       })
     end
 
@@ -601,7 +599,7 @@ module RDF::Cassandra
       statements = RDF::Enumerator.new(statements, statements.respond_to?(:each_statement) ? :each_statement : :each)
       statements.each do |statement|
         cache_statement(statement, caches)
-        if ((count += 1) % (INSERT_BATCH_SIZE * 2)).zero?
+        if ((count += 1) % CACHE_BATCH_SIZE).zero?
           @client.insert_data({cache_family.to_s => caches})
           caches = {}
         end
@@ -617,9 +615,7 @@ module RDF::Cassandra
     # @private
     def cache_statement(statement, caches = {})
       graph = (caches[DEFAULT_CACHE_GRAPH] ||= {}) # the default graph is identified by SHA1('')
-      count = (graph[:statements.to_s] ||= {})
-      sha1  = Digest::SHA1.digest(RDF::NTriples.serialize(statement))
-      count[sha1] = ''
+      graph[Digest::SHA1.digest(RDF::NTriples.serialize(statement))] = ''
       caches
     end
 

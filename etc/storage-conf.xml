@@ -65,9 +65,8 @@
        ~ @see http://rdf.rubyforge.org/cassandra/
       -->
       <ColumnFamily Name="Cache"
-                    ColumnType="Super"
-                    CompareWith="UTF8Type"
-                    CompareSubcolumnsWith="BytesType"
+                    ColumnType="Standard"
+                    CompareWith="BytesType"
                     Comment="RDF cache."/>
 
       <!--
