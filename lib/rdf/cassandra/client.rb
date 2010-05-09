@@ -123,17 +123,30 @@ module RDF::Cassandra
       mutations = {}
       data.each do |column_family, rows|
         column_family = encode(column_family)
-        rows.each do |key, supercolumns|
+        rows.each do |key, columns_or_supercolumns|
           key = encode(key)
           mutations[key] ||= {}
           mutations[key][column_family] ||= []
-          supercolumns.each do |supercolumn, columns|
-            mutations[key][column_family] << mutation(column_or_supercolumn(super_column({
-              :name    => encode(supercolumn),
-              :columns => columns.map do |column, value|
-                column(:name => encode(column), :value => encode(value), :timestamp => timestamp)
-              end
-            })))
+
+          if columns_or_supercolumns.first[1].is_a?(Hash)
+            # Supercolumn
+            columns_or_supercolumns.each do |supercolumn, columns|
+              mutations[key][column_family] << mutation(column_or_supercolumn(super_column({
+                :name    => encode(supercolumn),
+                :columns => columns.map do |column, value|
+                  column(:name => encode(column), :value => encode(value), :timestamp => timestamp)
+                end
+              })))
+            end
+          else
+            # Standard column
+            columns_or_supercolumns.each do |column, value|
+              mutations[key][column_family] << mutation(column_or_supercolumn(column({
+                :name      => encode(column),
+                :value     => encode(value),
+                :timestamp => timestamp,
+              })))
+            end
           end
         end
       end
