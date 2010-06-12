@@ -454,26 +454,7 @@ module RDF::Cassandra
       if block_given?
         block.call(RDF::Graph.new(nil, :data => self))
       else
-        enum_graph # @since RDF.rb 0.1.9
-      end
-    end
-
-    ##
-    # @see RDF::Queryable#query
-    # @private
-    def query(pattern, &block)
-      if block_given?
-        case pattern
-          when RDF::Statement
-            query_pattern(pattern, &block)
-          else super
-        end
-      else
-        raise ArgumentError.new("expected pattern, got #{pattern.inspect}") unless pattern
-        enum = RDF::Enumerator.new(self, :query, pattern)
-        enum.extend(RDF::Enumerable, RDF::Queryable)
-        def enum.to_a() super.extend(RDF::Enumerable, RDF::Queryable) end
-        enum
+        enum_graph
       end
     end
 
