@@ -214,7 +214,7 @@ module RDF::Cassandra
             key_slice.columns.each do |column_or_supercolumn|
               column    = column_or_supercolumn.column || column_or_supercolumn.super_column
               columns   = !column.respond_to?(:columns) ? [column] : column.columns
-              predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
+              predicate = RDF::URI.intern(column.name.to_s)
               columns.each do |column|
                 object = RDF::NTriples.unserialize(column.value.to_s)
                 block.call(RDF::Statement.new(subject, predicate, object))
@@ -343,7 +343,7 @@ module RDF::Cassandra
             value  = column.name.to_s
             unless values.include?(value)
               values[value] = true
-              block.call(RDF::URI.new(value)) # TODO: use RDF::URI.intern
+              block.call(RDF::URI.intern(value))
             end
           end
         end
@@ -496,7 +496,7 @@ module RDF::Cassandra
             key_slice.columns.each do |column_or_supercolumn|
               column    = column_or_supercolumn.column || column_or_supercolumn.super_column
               columns   = !column.respond_to?(:columns) ? [column] : column.columns
-              predicate = RDF::URI.new(column.name.to_s) # TODO: use RDF::URI.intern
+              predicate = RDF::URI.intern(column.name.to_s)
               if !pattern.has_predicate? || predicate == pattern.predicate
                 columns.each do |column|
                   object = RDF::NTriples.unserialize(column.value.to_s)
