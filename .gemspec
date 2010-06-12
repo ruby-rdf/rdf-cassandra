@@ -25,12 +25,12 @@ GEMSPEC = Gem::Specification.new do |gem|
   gem.test_files         = %w()
   gem.has_rdoc           = false
 
-  gem.required_ruby_version      = '>= 1.8.2'
+  gem.required_ruby_version      = '>= 1.8.7'
   gem.requirements               = ['Cassandra (>= 0.6.0)']
-  gem.add_development_dependency 'rdf-spec',    '>= 0.1.9'
+  gem.add_development_dependency 'rdf-spec',    '~> 0.2.0'
   gem.add_development_dependency 'rspec',       '>= 1.3.0'
-  gem.add_development_dependency 'yard' ,       '>= 0.5.3'
-  gem.add_runtime_dependency     'rdf',         '>= 0.1.9'
+  gem.add_development_dependency 'yard' ,       '>= 0.5.5'
+  gem.add_runtime_dependency     'rdf',         '~> 0.2.0'
   gem.add_runtime_dependency     'cassandra',   '>= 0.8.2'
   gem.post_install_message       = nil
 end
